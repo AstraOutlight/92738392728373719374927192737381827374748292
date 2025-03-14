@@ -1,0 +1,305 @@
+--FUCKING FIXED CAR
+
+
+local player = game:GetService("Players").LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local running = false -- Flag to control the toggle state
+local smokeEmitter -- To reference the Smoke object
+local smokePartInstance -- The actual Part in workspace to handle smoke
+local bopRunning = false -- Flag to control the bop state
+local carVisible = false -- Flag to track the visibility of the car
+local clonedCarAccessory -- To reference the cloned car accessory
+local walkSpeedToggle = false -- Flag to track walk speed state
+local frontLightsActive = false -- Flag to track front lights state
+local leftLight -- Reference for left headlight
+local rightLight -- Reference for right headlight
+
+-- Create the ScreenGui and buttons
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ToggleGui"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local buttonHeight = 50
+local buttonSpacing = 5
+local totalHeight = (buttonHeight * 6) + (buttonSpacing * 5) -- Total height for buttons
+local yOffset = 125 -- Additional offset to move buttons down
+
+local speedToggleButton = Instance.new("TextButton")
+speedToggleButton.Name = "SpeedToggleButton"
+speedToggleButton.Parent = screenGui
+speedToggleButton.Size = UDim2.new(0, 200, 0, buttonHeight)
+speedToggleButton.Position = UDim2.new(0.5, -100, 0.9, -totalHeight + yOffset) -- Positioned above all buttons
+speedToggleButton.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+speedToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+speedToggleButton.Text = "Enable Turbo"
+
+local visibleCarButton = Instance.new("TextButton")
+visibleCarButton.Name = "VisibleCarButton"
+visibleCarButton.Parent = screenGui
+visibleCarButton.Size = UDim2.new(0, 200, 0, buttonHeight)
+visibleCarButton.Position = UDim2.new(0.5, -100, 0.9, -totalHeight + buttonHeight + buttonSpacing + yOffset) -- Positioned below speed button
+visibleCarButton.BackgroundColor3 = Color3.fromRGB(128, 128, 128)
+visibleCarButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+visibleCarButton.Text = "Visible Car"
+
+local skrrtButton = Instance.new("TextButton")
+skrrtButton.Name = "SkrrtButton"
+skrrtButton.Parent = screenGui
+skrrtButton.Size = UDim2.new(0, 200, 0, buttonHeight)
+skrrtButton.Position = UDim2.new(0.5, -100, 0.9, -totalHeight + 2 * (buttonHeight + buttonSpacing) + yOffset) -- Positioned below the visible car button
+skrrtButton.BackgroundColor3 = Color3.fromRGB(0, 128, 255)
+skrrtButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+skrrtButton.Text = "Start"
+
+local bopButton = Instance.new("TextButton")
+bopButton.Name = "BopButton"
+bopButton.Parent = screenGui
+bopButton.Size = UDim2.new(0, 200, 0, buttonHeight)
+bopButton.Position = UDim2.new(0.5, -100, 0.9, -totalHeight + 3 * (buttonHeight + buttonSpacing) + yOffset) -- Positioned below the skrrt button
+bopButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+bopButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+bopButton.Text = "Bop"
+
+local frontLightsButton = Instance.new("TextButton")
+frontLightsButton.Name = "FrontLightsButton"
+frontLightsButton.Parent = screenGui
+frontLightsButton.Size = UDim2.new(0, 200, 0, buttonHeight)
+frontLightsButton.Position = UDim2.new(0.5, -100, 0.9, -totalHeight + 4 * (buttonHeight + buttonSpacing) + yOffset) -- Positioned below the bop button
+frontLightsButton.BackgroundColor3 = Color3.fromRGB(255, 255, 0)
+frontLightsButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+frontLightsButton.Text = "Enable Lights"
+
+-- Function to create a smoke emitter
+local function createSmokeEmitter()
+    if smokePartInstance then return end -- Avoid creating multiple smoke parts
+    smokePartInstance = Instance.new("Part")
+    smokePartInstance.Name = "SkrrtSmokePart"
+    smokePartInstance.Size = Vector3.new(1, 1, 1) -- Small part to hold the smoke
+    smokePartInstance.Transparency = 1 -- Invisible part
+    smokePartInstance.CanCollide = false
+    smokePartInstance.Anchored = false
+    smokePartInstance.Parent = workspace -- Parent it to the workspace
+
+    local smokeEmitter = Instance.new("Smoke")
+    smokeEmitter.Name = "SkrrtSmoke"
+    smokeEmitter.Opacity = 0.6 -- Higher opacity for more visible smoke
+    smokeEmitter.RiseVelocity = 0.5 -- Slow rise speed for exhaust-like effect
+    smokeEmitter.Size = 1.5 -- Larger smoke particles for visibility
+    smokeEmitter.Color = Color3.new(0.9, 0.9, 0.9) -- Whiter smoke (almost pure white)
+    smokeEmitter.Enabled = true -- Ensure it's enabled
+    smokeEmitter.Parent = smokePartInstance
+
+    -- Update the smokePartInstance position every frame
+    game:GetService("RunService").RenderStepped:Connect(function()
+        if smokePartInstance and character then
+            local characterHead = character:FindFirstChild("Head")
+            if characterHead then
+                smokePartInstance.CFrame = characterHead.CFrame - (characterHead.CFrame.LookVector * 2) -- 2 studs behind the head
+                smokePartInstance.CFrame = smokePartInstance.CFrame - (characterHead.CFrame.UpVector * 3) -- 3 studs below the head
+            end
+        end
+    end)
+end
+
+-- Function to stop the smoke emitter
+local function stopSmokeEmitter()
+    if smokePartInstance then
+        smokePartInstance:Destroy()
+        smokePartInstance = nil -- Reset so it can be created again when started
+    end
+end
+
+-- Function to make the player bop up and down
+local function bopPlayer()
+    local humanoid = character:FindFirstChildWhichIsA("Humanoid")
+    if not humanoid then return end
+    local originalHipHeight = humanoid.HipHeight
+    local increment = 0.01
+    local delay = 0.01
+
+    -- Update button text immediately
+    bopButton.Text = "Stop Bop"
+
+    while bopRunning do
+        -- Increase HipHeight
+        for height = originalHipHeight, originalHipHeight + 0.10, increment do
+            humanoid.HipHeight = height
+            wait(delay)
+        end
+        -- Decrease HipHeight
+        for height = originalHipHeight + 0.10, originalHipHeight, -increment do
+            humanoid.HipHeight = height
+            wait(delay)
+        end
+    end
+
+    -- Ensure it returns to the original height
+    humanoid.HipHeight = originalHipHeight
+    bopButton.Text = "Bop" -- Reset the button text after stopping
+end
+
+-- Function to handle car visibility and cloning the accessory
+local function toggleVisibleCarFunction()
+    if carVisible then
+        -- Delete the cloned car accessory if it exists
+        if clonedCarAccessory then
+            clonedCarAccessory:Destroy()
+            clonedCarAccessory = nil
+        end
+        visibleCarButton.Text = "Visible Car"
+    else
+        -- Find the accessory named "Accessory (Car1 - Driver)" in the player's character
+        local carAccessory = character:FindFirstChild("Accessory (Car1 - Driver)")
+
+        if carAccessory then
+            -- Check if the accessory is already cloned to workspace
+            if workspace:FindFirstChild("ClonedCarAccessory") then
+                workspace.ClonedCarAccessory:Destroy() -- Remove the previous clone if it exists
+            end
+            
+            -- Clone the accessory
+            clonedCarAccessory = carAccessory:Clone()
+            clonedCarAccessory.Name = "ClonedCarAccessory" -- Name the clone
+            clonedCarAccessory.Parent = workspace
+
+            -- Set the PrimaryPart to the first BasePart in the cloned accessory
+            local primaryPart = clonedCarAccessory:FindFirstChildOfClass("BasePart")
+            if primaryPart then
+                clonedCarAccessory.PrimaryPart = primaryPart
+
+                -- Ensure the cloned accessory stays attached to the original one
+                game:GetService("RunService").Stepped:Connect(function()
+                    if carAccessory and clonedCarAccessory then
+                        clonedCarAccessory:SetPrimaryPartCFrame(carAccessory.PrimaryPart.CFrame) -- Keep it moving with the original
+                    end
+                end)
+            end
+
+            -- Set the collision properties of the cloned accessory parts
+            for _, part in pairs(clonedCarAccessory:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false -- Set to false for each part
+                end
+            end
+        end
+        visibleCarButton.Text = "Delete" -- Change button text to "Delete"
+    end
+
+    -- Toggle the visibility
+    carVisible = not carVisible
+end
+
+-- Function to toggle walk speed
+local function toggleWalkSpeed()
+    local humanoid = character:FindFirstChildWhichIsA("Humanoid")
+    if not humanoid then return end
+
+    if walkSpeedToggle then
+        humanoid.WalkSpeed = 60 -- Reset to base speed
+        speedToggleButton.Text = "Enable Turbo" -- Update button text
+    else
+        humanoid.WalkSpeed = 300 -- Turbo speed
+        speedToggleButton.Text = "Stop Turbo" -- Update button text
+    end
+
+    walkSpeedToggle = not walkSpeedToggle -- Toggle the state
+end
+
+-- Connect button events
+speedToggleButton.MouseButton1Click:Connect(toggleWalkSpeed)
+visibleCarButton.MouseButton1Click:Connect(toggleVisibleCarFunction)
+skrrtButton.MouseButton1Click:Connect(function()
+    running = not running
+    if running then
+        createSmokeEmitter() -- Create smoke when starting
+        skrrtButton.Text = "Stop"
+    else
+        stopSmokeEmitter() -- Stop the smoke when stopping
+        skrrtButton.Text = "Start"
+    end
+end)
+bopButton.MouseButton1Click:Connect(function()
+    bopRunning = not bopRunning
+    if bopRunning then
+        bopPlayer() -- Start the bop effect
+    else
+        bopRunning = false -- Stop the bop effect
+        bopButton.Text = "Bop" -- Reset button text immediately
+    end
+end)
+frontLightsButton.MouseButton1Click:Connect(function()
+    frontLightsActive = not frontLightsActive
+
+    if frontLightsActive then
+        -- Create headlights
+        local rootPart = character:WaitForChild("HumanoidRootPart")
+        leftLight = Instance.new("SpotLight")
+        leftLight.Name = "LeftHeadlight"
+        leftLight.Parent = rootPart
+        leftLight.Brightness = 1 -- Brightness set to 1
+        leftLight.Color = Color3.new(1, 1, 1)
+        leftLight.Face = Enum.NormalId.Front
+        leftLight.Range = 60
+        leftLight.Angle = 90
+
+        rightLight = Instance.new("SpotLight")
+        rightLight.Name = "RightHeadlight"
+        rightLight.Parent = rootPart
+        rightLight.Brightness = 1 -- Brightness set to 1
+        rightLight.Color = Color3.new(1, 1, 1)
+        rightLight.Face = Enum.NormalId.Front
+        rightLight.Range = 60
+        rightLight.Angle = 90
+
+        frontLightsButton.Text = "Disable Lights"
+    else
+        -- Remove headlights
+        if leftLight then
+            leftLight:Destroy()
+            leftLight = nil
+        end
+        if rightLight then
+            rightLight:Destroy()
+            rightLight = nil
+        end
+        frontLightsButton.Text = "Enable Lights"
+    end
+end)
+
+-- Customizations based on rig type
+if character:FindFirstChildWhichIsA("Humanoid").RigType == Enum.HumanoidRigType.R6 then
+    local humanoid = character:FindFirstChildWhichIsA("Humanoid")
+    humanoid.WalkSpeed = 60
+    humanoid.JumpPower = 20
+    character.Animate.walk.WalkAnim.AnimationId = "rbxassetid://129342287"
+    character.Animate.run.RunAnim.AnimationId = "rbxassetid://129342287"
+    character.Animate.fall.FallAnim.AnimationId = "rbxassetid://129342287"
+    character.Animate.idle.Animation1.AnimationId = "rbxassetid://129342287"
+    character.Animate.idle.Animation2.AnimationId = "rbxassetid://129342287"
+    character.Animate.jump.JumpAnim.AnimationId = "rbxassetid://129342287"
+
+    for _, thing in pairs(character:GetDescendants()) do
+        if thing:IsA("Part") then
+            thing.CustomPhysicalProperties = PhysicalProperties.new(0.04, 0, 0)
+        end
+    end
+
+    local r6height = -0.35
+    humanoid.HipHeight = r6height
+elseif character:FindFirstChildWhichIsA("Humanoid").RigType == Enum.HumanoidRigType.R15 then
+    local humanoid = character:FindFirstChildWhichIsA("Humanoid")
+    humanoid.WalkSpeed = 60
+    humanoid.JumpPower = 20
+    character.Animate.walk.WalkAnim.AnimationId = "rbxassetid://3360694441"
+    character.Animate.run.RunAnim.AnimationId = "rbxassetid://3360694441"
+    character.Animate.fall.FallAnim.AnimationId = "rbxassetid://3360694441"
+    character.Animate.idle.Animation1.AnimationId = "rbxassetid://3360694441"
+    character.Animate.idle.Animation2.AnimationId = "3360694441"
+    character.Animate.jump.JumpAnim.AnimationId = "rbxassetid://3360694441"
+
+    for _, thing in pairs(character:GetDescendants()) do
+        if thing:IsA("MeshPart") then
+            thing.CustomPhysicalProperties = PhysicalProperties.new(0.04, 0, 0)
+        end
+    end
+end
